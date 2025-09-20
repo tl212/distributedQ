@@ -1,0 +1,32 @@
+# Backend Framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-socketio==5.10.0
+python-multipart==0.0.6
+
+# Database
+sqlalchemy==2.0.23
+alembic==1.12.1
+asyncpg==0.29.0
+
+# Authentication
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-decouple==3.8
+
+# WebRTC signaling
+aiortc==1.6.0
+
+# Redis for session management
+redis==5.0.1
+aioredis==2.0.1
+
+# Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+httpx==0.25.1
+
+# Development
+black==23.11.0
+flake8==6.1.0
+pre-commit==3.5.0
