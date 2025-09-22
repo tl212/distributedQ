@@ -17,6 +17,7 @@ from typing import Any, Optional, Dict, List, Callable
 from uuid import uuid4
 from datetime import datetime, timedelta
 from enum import Enum
+from ..monitoring.metrics import get_metrics
 
 # task executon status
 class TaskStatus(Enum):
@@ -105,6 +106,14 @@ class PriorityQueue:
             heapq.heappush(self._heap, task)
             self._task_map[task.task_id] = task
             self._not_empty.notify()
+            
+            # record metrics
+            metrics = get_metrics()
+            task_type = "default"
+            if isinstance(task.payload, dict):
+                task_type = task.payload.get('type', 'default')
+            metrics.record_task_submitted(task_type, task.priority)
+            
             return True
     
     def get(self, block: bool = True, timeout: Optional[float] = None) -> Optional[Task]:

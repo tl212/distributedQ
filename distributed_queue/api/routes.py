@@ -10,6 +10,7 @@ import uuid
 
 from ..core.queue import Task, TaskStatus
 from ..core.worker import WorkerConfig
+from ..monitoring.metrics import get_metrics
 
 
 # pydantic models for request/response
@@ -272,9 +273,21 @@ class QueueRouter:
         
         @self.router.get("/health")
         async def health_check():
-            # health check endpoint
-            return {
-                "status": "healthy",
-                "queue_size": self.queue.size(),
-                "workers_running": sum(1 for w in self.worker_pool.workers.values() if w.running)
-            }
+            """health check endpoint"""
+            metrics = get_metrics()
+            health_status = metrics.get_health_status()
+            return health_status
+        
+        @self.router.get("/metrics")
+        async def get_metrics_json():
+            """get detailed metrics in JSON format"""
+            metrics = get_metrics()
+            return metrics.get_metrics_snapshot()
+        
+        @self.router.get("/metrics/prometheus")
+        async def get_prometheus_metrics():
+            """get metrics in Prometheus format"""
+            from fastapi.responses import PlainTextResponse
+            metrics = get_metrics()
+            prometheus_data = metrics.export_prometheus()
+            return PlainTextResponse(prometheus_data, media_type="text/plain")

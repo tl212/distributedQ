@@ -12,6 +12,7 @@ from typing import Callable, Optional, Any, Dict
 from concurrent.futures import ThreadPoolExecutor, Future
 from dataclasses import dataclass
 from .queue import PriorityQueue, Task, TaskStatus
+from ..monitoring.metrics import get_metrics
 
 # configure logging
 logging.basicConfig(level=logging.INFO)
@@ -128,6 +129,11 @@ class Worker:
         """
         logger.info(f"[{self.config.name}] Processing task {task.task_id}")
         
+        # record task start
+        metrics = get_metrics()
+        metrics.record_task_started()
+        wait_time = time.time() - task.created_at
+        
         try:
             # extract task type and data from payload
             if isinstance(task.payload, dict):
@@ -151,6 +157,9 @@ class Worker:
             self.queue.mark_completed(task.task_id)
             logger.info(f"[{self.config.name}] Task {task.task_id} completed in {execution_time:.2f}s")
             
+            # record metrics
+            metrics.record_task_completed(task_type, execution_time, wait_time)
+            
             return result
             
         except Exception as e:
@@ -160,11 +169,11 @@ class Worker:
             if self.config.error_handler:
                 self.config.error_handler(task, e)
                 
-            # mark task as failed (will be retried or moved to DLQ)
+            # mark task as failed (will be retried or moved to dead letter queue)
             self.queue.mark_failed(task.task_id, str(e))
             
         finally:
-            # remove from active tasks
+            # remove from active tasks list         
             with self._lock:
                 self.active_tasks.pop(task.task_id, None)
                 
