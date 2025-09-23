@@ -1,9 +1,0 @@
-Test file to verify git configuration
-Created: 2025-09-23
-Purpose: Ensure commits are properly attributed to tl212
-
-This is a test commit to verify that:
-- Author name shows as: tl212
-- Author email shows as: tl212@users.noreply.github.com
-
-This file can be safely deleted after verification.
