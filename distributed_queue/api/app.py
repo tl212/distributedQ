@@ -6,8 +6,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
+import os
 
-from ..core.queue import PriorityQueue
+from ..core.hybrid_queue import HybridQueue, StorageBackend
 from ..core.worker import WorkerPool, WorkerConfig
 from .routes import QueueRouter
 
@@ -30,9 +31,28 @@ async def lifespan(app: FastAPI):
     # startup
     logger.info("Starting Distributed Queue API...")
     
-    # initialize queue
-    queue = PriorityQueue(max_size=1000, rate_limit=100)
-    
+    # get configuration from enviroment variables 
+    use_redis = os.getenv("USE_REDIS", "false").lower() = "true"
+    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    max_queue_size = int(os.getenv("MAX_QUEUE_SIZE", "1000"))
+    rate_limit = int(os.getenv("RATE_LIMIT", "100"))
+
+    # initialize hybrid queue with Redis or in-memory backend
+    backend = StorageBackend.REDIS if use_redis else StorageBackend.MEMORY
+
+    queue = HybridQueue(
+        backend=backend,
+        redis_url=redis_url,
+        max_size=max_queue_size,
+        rate_limit=rate_limit,
+        key_prefix="distqueue"
+        )
+
+    # log which backend is being used
+    queue_health = queue.health_check()
+    logger.info(f"Queue backend: {queue_health['backend']}")
+    logger.info(f"Queue status: {queue_health['message']}")
+
     # initialize worker pool
     worker_pool = WorkerPool(queue)
     
@@ -92,7 +112,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Distributed Queue API",
     description="A distributed task queue system with priority support",
-    version="1.0.0",
+    version="2.0.0",
     lifespan=lifespan
 )
 

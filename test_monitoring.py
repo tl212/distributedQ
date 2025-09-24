@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Test script for monitoring features
+test script for monitoring features
 """
 
 import requests
@@ -14,7 +14,7 @@ def test_monitoring():
     print("Testing Monitoring Features")
     print("=" * 50)
     
-    # Test health endpoint
+    # test health endpoint
     print("\n1. Testing Health Endpoint...")
     response = requests.get(f"{BASE_URL}/api/v1/health")
     if response.status_code == 200:
@@ -25,7 +25,7 @@ def test_monitoring():
     else:
         print(f"❌ Health check failed: {response.status_code}")
     
-    # Test metrics endpoint
+    # test metrics endpoint
     print("\n2. Testing Metrics Endpoint...")
     response = requests.get(f"{BASE_URL}/api/v1/metrics")
     if response.status_code == 200:
@@ -38,7 +38,7 @@ def test_monitoring():
     else:
         print(f"❌ Metrics fetch failed: {response.status_code}")
     
-    # Test Prometheus endpoint
+    # test Prometheus endpoint
     print("\n3. Testing Prometheus Endpoint...")
     response = requests.get(f"{BASE_URL}/api/v1/metrics/prometheus")
     if response.status_code == 200:
@@ -51,11 +51,11 @@ def test_monitoring():
     else:
         print(f"❌ Prometheus metrics failed: {response.status_code}")
     
-    # Submit some tasks to generate metrics
+    # submit some tasks to generate metrics
     print("\n4. Generating Test Load...")
     print("   Submitting tasks to generate metrics...")
     
-    # Submit various types of tasks
+    # submit various types of tasks
     task_types = [
         {"type": "simple", "data": "Test task"},
         {"type": "math", "data": {"operation": "add", "a": 10, "b": 20}},
@@ -73,11 +73,11 @@ def test_monitoring():
         else:
             print(f"   ❌ Failed to submit task {i+1}")
     
-    # Wait for processing
+    # wait for processing
     print("\n5. Waiting for task processing...")
     time.sleep(3)
     
-    # Check updated metrics
+    # check updated metrics
     print("\n6. Checking Updated Metrics...")
     response = requests.get(f"{BASE_URL}/api/v1/metrics")
     if response.status_code == 200:
