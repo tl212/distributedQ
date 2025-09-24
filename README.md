@@ -202,7 +202,7 @@ pytest --cov=distributed_queue distributed_queue/tests/
 
 ### 🚧 Stage 2: Distributed Features (In Progress)
 - [x] Redis backend for persistence
-- [ ] Visibility timeout for failure recovery
+- [x] Visibility timeout for failure recovery
 - [ ] Prometheus metrics integration
 - [ ] Enhanced API with authentication
 - [ ] Task result storage
