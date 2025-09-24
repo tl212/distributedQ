@@ -164,18 +164,24 @@ worker.start()
 
 ## 📊 API Endpoints
 
+Security: write operations are protected by an optional API key.
+- Set an API key: `export API_KEY=your-secret`
+- Include header on protected requests: `X-API-Key: your-secret`
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/v1/tasks` | Submit a new task |
+| POST | `/api/v1/tasks` | Submit a new task (requires X-API-Key if API_KEY is set) |
 | GET | `/api/v1/tasks/{task_id}` | Get task status |
 | GET | `/api/v1/stats` | Queue statistics |
 | GET | `/api/v1/dead-letters` | View failed tasks |
-| POST | `/api/v1/workers` | Create new worker |
-| POST | `/api/v1/workers/start` | Start all workers |
-| POST | `/api/v1/workers/stop` | Stop all workers |
+| POST | `/api/v1/workers` | Create new worker (requires X-API-Key if API_KEY is set) |
+| POST | `/api/v1/workers/start` | Start all workers (requires X-API-Key if API_KEY is set) |
+| POST | `/api/v1/workers/stop` | Stop all workers (requires X-API-Key if API_KEY is set) |
 | GET | `/api/v1/health` | Health check |
 | GET | `/api/v1/metrics` | Prometheus metrics |
 | GET | `/api/v1/metrics/json` | Detailed metrics in JSON |
+| DELETE | `/api/v1/workers/{worker_name}` | Remove worker (requires X-API-Key if API_KEY is set) |
+| DELETE | `/api/v1/queue/clear` | Clear all tasks (requires X-API-Key if API_KEY is set) |
 
 ## 🧪 Testing
 
