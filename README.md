@@ -131,11 +131,17 @@ curl -X POST "http://localhost:8000/api/v1/tasks" \
 ### 3. Using Python Client
 
 ```python
-from distributed_queue.core.queue import PriorityQueue, Task
+from distributed_queue.core.hybrid_queue import HybridQueue, StorageBackend
+from distributed_queue.core.queue import Task
 from distributed_queue.core.worker import Worker, WorkerConfig
 
-# create queue
-queue = PriorityQueue(max_size=1000, rate_limit=100)
+# create queue with visibility timeout
+queue = HybridQueue(
+    backend=StorageBackend.MEMORY,  # or StorageBackend.REDIS
+    max_size=1000,
+    rate_limit=100,
+    visibility_timeout=300.0
+)
 
 # create and configure worker
 config = WorkerConfig(name="worker-1", max_workers=5)
@@ -168,6 +174,8 @@ worker.start()
 | POST | `/api/v1/workers/start` | Start all workers |
 | POST | `/api/v1/workers/stop` | Stop all workers |
 | GET | `/api/v1/health` | Health check |
+| GET | `/api/v1/metrics` | Prometheus metrics |
+| GET | `/api/v1/metrics/json` | Detailed metrics in JSON |
 
 ## 🧪 Testing
 
@@ -203,7 +211,7 @@ pytest --cov=distributed_queue distributed_queue/tests/
 ### 🚧 Stage 2: Distributed Features (In Progress)
 - [x] Redis backend for persistence
 - [x] Visibility timeout for failure recovery
-- [ ] Prometheus metrics integration
+- [x] Prometheus metrics integration
 - [ ] Enhanced API with authentication
 - [ ] Task result storage
 
@@ -277,6 +285,7 @@ See the [examples/](distributed_queue/examples/) directory for:
 Built with modern Python tools and frameworks:
 - FastAPI for the REST API
 - Redis for distributed storage
+- Prometheus for metrics/observability
 - Pytest for testing
 - Pydantic for data validation
 
@@ -286,7 +295,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 👤 Author
 
-**Your Name**
+**Thomas Lee**
 - LinkedIn: [7homas Lee](https://www.linkedin.com/in/tl212/)
 - GitHub: [@tl22](https://github.com/tl22)
 - Email: tl33@upenn.alumni.edu
