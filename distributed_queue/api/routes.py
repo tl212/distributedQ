@@ -2,7 +2,7 @@
 fastAPI routes for queue operations
 """
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Depends
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 from datetime import datetime
@@ -11,6 +11,7 @@ import uuid
 from ..core.queue import Task, TaskStatus
 from ..core.worker import WorkerConfig
 from ..monitoring.metrics import get_metrics
+from .security import require_api_key
 
 
 # pydantic models for request/response
@@ -76,7 +77,7 @@ class QueueRouter:
     def _setup_routes(self):
         # setup all API routes
         
-        @self.router.post("/tasks", response_model=TaskResponse)
+@self.router.post("/tasks", response_model=TaskResponse, dependencies=[Depends(require_api_key)])
         async def submit_task(task_submission: TaskSubmission):
             # submit a new task to the queue
             try:
@@ -179,7 +180,7 @@ class QueueRouter:
                 for task in paginated
             ]
         
-        @self.router.post("/workers", response_model=MessageResponse)
+@self.router.post("/workers", response_model=MessageResponse, dependencies=[Depends(require_api_key)])
         async def create_worker(worker_config: WorkerConfigRequest):
             # create a new worker
             try:
@@ -209,7 +210,7 @@ class QueueRouter:
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
         
-        @self.router.post("/workers/start", response_model=MessageResponse)
+@self.router.post("/workers/start", response_model=MessageResponse, dependencies=[Depends(require_api_key)])
         async def start_workers():
             # start all workers
             try:
@@ -222,7 +223,7 @@ class QueueRouter:
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
         
-        @self.router.post("/workers/stop", response_model=MessageResponse)
+@self.router.post("/workers/stop", response_model=MessageResponse, dependencies=[Depends(require_api_key)])
         async def stop_workers():
             # stop all workers
             try:
@@ -234,7 +235,7 @@ class QueueRouter:
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
         
-        @self.router.delete("/workers/{worker_name}", response_model=MessageResponse)
+@self.router.delete("/workers/{worker_name}", response_model=MessageResponse, dependencies=[Depends(require_api_key)])
         async def remove_worker(worker_name: str):
             # remove a specific worker
             if worker_name not in self.worker_pool.workers:
@@ -251,7 +252,7 @@ class QueueRouter:
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
         
-        @self.router.delete("/queue/clear", response_model=MessageResponse)
+@self.router.delete("/queue/clear", response_model=MessageResponse, dependencies=[Depends(require_api_key)])
         async def clear_queue():
             # clear all tasks from queue
             try:

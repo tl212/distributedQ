@@ -32,7 +32,7 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Distributed Queue API...")
     
     # get configuration from enviroment variables 
-    use_redis = os.getenv("USE_REDIS", "false").lower() = "true"
+    use_redis = os.getenv("USE_REDIS", "false").lower() == "true"
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
     max_queue_size = int(os.getenv("MAX_QUEUE_SIZE", "1000"))
     rate_limit = int(os.getenv("RATE_LIMIT", "100"))
