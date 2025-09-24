@@ -218,7 +218,7 @@ pytest --cov=distributed_queue distributed_queue/tests/
 - [x] Redis backend for persistence
 - [x] Visibility timeout for failure recovery
 - [x] Prometheus metrics integration
-- [ ] Enhanced API with authentication
+- [X] Enhanced API with authentication
 - [ ] Task result storage
 
 ### 🔮 Future Enhancements
