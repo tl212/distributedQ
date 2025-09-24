@@ -40,7 +40,7 @@ class Worker:
         - task execution callbacks
     """
     
-    def __init__(self, queue: PriorityQueue, config: WorkerConfig):
+    def __init__(self, queue, config: WorkerConfig):
         """
         initialize a worker
         
@@ -104,8 +104,8 @@ class Worker:
     def _run(self):
         while self.running:
             try:
-                # get a task from the queue
-                task = self.queue.get(block=False)
+                # get a task from the queue (with visibility lease)
+                task = self.queue.get(worker_id=self.config.name, block=False)                
                 
                 if task:
                     # submit task for processing
@@ -153,8 +153,8 @@ class Worker:
             result = handler(task_data)
             execution_time = time.time() - start_time
             
-            # mark task as completed
-            self.queue.mark_completed(task.task_id)
+            # mark task as completed (releases visibility lease)
+            self.queue.mark_completed(task.task_id, worker_id=self.config.name)
             logger.info(f"[{self.config.name}] Task {task.task_id} completed in {execution_time:.2f}s")
             
             # record metrics
@@ -169,8 +169,8 @@ class Worker:
             if self.config.error_handler:
                 self.config.error_handler(task, e)
                 
-            # mark task as failed (will be retried or moved to dead letter queue)
-            self.queue.mark_failed(task.task_id, str(e))
+            # mark task as failed (releases visibity lease)
+            self.queue.mark_failed(task.task_id, str(e), worker_id=self.config.name)
             
         finally:
             # remove from active tasks list         
@@ -188,6 +188,21 @@ class Worker:
                 'max_workers': self.config.max_workers,
                 'handlers': list(self.handlers.keys())
             }
+    
+    def _extend_lease_if_needed(self, task: Task, elapsed_time: float):
+        """
+        Extend lease if task is taking longer than expected
+        """
+        if hasattr(task, 'lease') and hasattr(self.queue, 'extend_lease'):
+            # if task has been running for > 80% of timeout, extend it
+            if elapsed_time > (task.lease.timeout * 0.8):
+                extended = self.queue.extend_lease(
+                    task.task_id, 
+                    self.config.name,
+                    additional_time=300.0  # extend by 5 more minutes
+                )
+                if extended:
+                    logger.info(f"[{self.config.name}] Extended lease for task {task.task_id}")
 
 
 # worker pool
