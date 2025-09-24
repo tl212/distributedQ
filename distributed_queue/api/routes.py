@@ -278,16 +278,16 @@ class QueueRouter:
             health_status = metrics.get_health_status()
             return health_status
         
-        @self.router.get("/metrics")
+        @self.router.get("/metrics/json")
         async def get_metrics_json():
             """get detailed metrics in JSON format"""
             metrics = get_metrics()
             return metrics.get_metrics_snapshot()
         
-        @self.router.get("/metrics/prometheus")
+        @self.router.get("/metrics")
         async def get_prometheus_metrics():
-            """get metrics in Prometheus format"""
-            from fastapi.responses import PlainTextResponse
-            metrics = get_metrics()
-            prometheus_data = metrics.export_prometheus()
-            return PlainTextResponse(prometheus_data, media_type="text/plain")
+            """Expose Prometheus metrics for scraping"""
+            from fastapi.responses import Response
+            from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+            data = generate_latest()
+            return Response(content=data, media_type=CONTENT_TYPE_LATEST)

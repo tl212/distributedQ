@@ -13,6 +13,13 @@ from typing import Dict, Optional, Set
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
+# prometheus visibility metrics helpers
+from ..monitoring.metrics import (
+    prom_set_active_leases,
+    prom_inc_lease_expiration,
+    prom_inc_lease_extension,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -113,6 +120,12 @@ class VisibilityManager:
             )
 
             self.active_leases[task_id] = lease
+            # update active leases gauge
+            try:
+                prom_set_active_leases(len(self.active_leases))
+            except Exception:
+                pass
+
             logger.debug(
                 f"Acquired lease: task={task_id}, worker={worker_id}, timeout={lease.timeout}s"
             )
@@ -140,6 +153,12 @@ class VisibilityManager:
                 return False
 
             del self.active_leases[task_id]
+            # update active leases gauge
+            try:
+                prom_set_active_leases(len(self.active_leases))
+            except Exception:
+                pass
+
             logger.debug(f"Released lease: task={task_id}, worker={worker_id}")
             return True
 
@@ -169,6 +188,11 @@ class VisibilityManager:
             extension = additional_time or self.default_timeout
             lease.timeout += extension
             logger.info(f"Extended lease: task={task_id}, additional={extension}s")
+            # increment lease extension counter
+            try:
+                prom_inc_lease_extension()
+            except Exception:
+                pass
             return True
 
     def check_lease(self, task_id: str) -> Optional[TaskLease]:
@@ -222,6 +246,12 @@ class VisibilityManager:
                 if expired_tasks:
                     logger.info(f"Found {len(expired_tasks)} expired leases")
 
+                    # increment expiration counter
+                    try:
+                        prom_inc_lease_expiration(len(expired_tasks))
+                    except Exception:
+                        pass
+
                     for task_id in expired_tasks:
                         with self._lock:
                             if task_id in self.active_leases:
@@ -238,6 +268,11 @@ class VisibilityManager:
 
                                 # remove expired lease
                                 del self.active_leases[task_id]
+                                # update active leases gauge after removal
+                                try:
+                                    prom_set_active_leases(len(self.active_leases))
+                                except Exception:
+                                    pass
                                 logger.info(f"Removed expired lease for task {task_id}")
 
                 # sleep until next check

@@ -14,6 +14,8 @@ from collections import deque, defaultdict
 from enum import Enum
 import json
 
+# prometheus client for exporting metrics
+from prometheus_client import Counter, Gauge, Histogram, generate_latest, CONTENT_TYPE_LATEST
 
 class MetricType(Enum):
     """Types of metrics we collect"""
@@ -94,54 +96,115 @@ class RollingWindow:
         )
 
 
+# prometheus metric definitions (default registry)
+DQ_TASKS_SUBMITTED = Counter(
+    "dq_tasks_submitted_total",
+    "Total number of tasks submitted",
+    ["type", "priority"]
+)
+DQ_TASKS_STARTED = Counter(
+    "dq_tasks_started_total",
+    "Total number of tasks started"
+)
+DQ_TASKS_COMPLETED = Counter(
+    "dq_tasks_completed_total",
+    "Total number of tasks completed",
+    ["type"]
+)
+DQ_TASKS_FAILED = Counter(
+    "dq_tasks_failed_total",
+    "Total number of tasks failed",
+    ["type"]
+)
+DQ_QUEUE_DEPTH = Gauge(
+    "dq_queue_depth",
+    "Current number of tasks in queue"
+)
+DQ_ACTIVE_WORKERS = Gauge(
+    "dq_active_workers",
+    "Current number of active workers"
+)
+DQ_ACTIVE_TASKS = Gauge(
+    "dq_active_tasks",
+    "Current number of active tasks being processed"
+)
+DQ_TASK_PROCESSING_SECONDS = Histogram(
+    "dq_task_processing_seconds",
+    "Task processing time in seconds",
+    buckets=[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60]
+)
+DQ_TASK_WAIT_SECONDS = Histogram(
+    "dq_task_wait_seconds",
+    "Task wait time in seconds before processing",
+    buckets=[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60]
+)
+DQ_ACTIVE_LEASES = Gauge(
+    "dq_active_leases",
+    "Current number of active task leases"
+)
+DQ_LEASE_EXPIRATIONS = Counter(
+    "dq_lease_expirations_total",
+    "Total number of lease expirations detected"
+)
+DQ_LEASE_EXTENSIONS = Counter(
+    "dq_lease_extensions_total",
+    "Total number of lease extensions performed"
+)
+
 class QueueMetrics:
-    """Comprehensive metrics collection for the queue system"""
+    # comprehensive metrics collection for the queue system
     
     def __init__(self):
         self._lock = threading.Lock()
         self._start_time = time.time()
         
-        # Counters
+        # counters
         self.tasks_submitted = 0
         self.tasks_completed = 0
         self.tasks_failed = 0
         self.tasks_retried = 0
         self.tasks_dead_lettered = 0
         
-        # Gauges
+        # gauges
         self.queue_depth = 0
         self.active_workers = 0
         self.active_tasks = 0
         
-        # Histograms (using rolling windows)
+        # histograms (using rolling windows)
         self.task_processing_times = RollingWindow(300)  # 5 minutes
         self.task_wait_times = RollingWindow(300)
         self.queue_depths = RollingWindow(300)
         
-        # Task metrics by type
+        # task metrics by type
         self.tasks_by_type: Dict[str, int] = defaultdict(int)
         self.failures_by_type: Dict[str, int] = defaultdict(int)
         
-        # Rate calculations
+        # rate calculations
         self.submission_rate_window = RollingWindow(60)  # 1 minute
         self.completion_rate_window = RollingWindow(60)
         
-        # Error tracking
+        # error tracking
         self.recent_errors: deque = deque(maxlen=100)
     
     def record_task_submitted(self, task_type: str = "default", priority: int = 0):
-        """Record a task submission"""
+        """record a task submission"""
         with self._lock:
             self.tasks_submitted += 1
             self.tasks_by_type[task_type] += 1
             self.submission_rate_window.add(1)
             self.queue_depth += 1
             self.queue_depths.add(self.queue_depth)
+            # prometheus updates
+            try:
+                DQ_TASKS_SUBMITTED.labels(type=task_type, priority=str(priority)).inc()
+                DQ_QUEUE_DEPTH.set(self.queue_depth)
+            except Exception:
+                pass
     
     def record_task_completed(self, task_type: str = "default", 
                              processing_time: float = 0, 
                              wait_time: float = 0):
-        """Record successful task completion"""
+        """record successful task completion"""
         with self._lock:
             self.tasks_completed += 1
             self.completion_rate_window.add(1)
@@ -152,11 +215,22 @@ class QueueMetrics:
                 self.task_processing_times.add(processing_time)
             if wait_time > 0:
                 self.task_wait_times.add(wait_time)
+            # prometheus updates
+            try:
+                DQ_TASKS_COMPLETED.labels(type=task_type).inc()
+                if processing_time > 0:
+                    DQ_TASK_PROCESSING_SECONDS.observe(processing_time)
+                if wait_time > 0:
+                    DQ_TASK_WAIT_SECONDS.observe(wait_time)
+                DQ_ACTIVE_TASKS.set(self.active_tasks)
+                DQ_QUEUE_DEPTH.set(self.queue_depth)
+            except Exception:
+                pass
     
     def record_task_failed(self, task_type: str = "default", 
                           error: Optional[str] = None, 
                           will_retry: bool = False):
-        """Record task failure"""
+        """record task failure"""
         with self._lock:
             self.tasks_failed += 1
             self.failures_by_type[task_type] += 1
@@ -171,39 +245,61 @@ class QueueMetrics:
                 self.recent_errors.append({
                     'timestamp': time.time(),
                     'task_type': task_type,
-                    'error': error[:500]  # Limit error message length
+                    'error': error[:500]  # limit error message length
                 })
+            # prometheus updates
+            try:
+                DQ_TASKS_FAILED.labels(type=task_type).inc()
+                DQ_QUEUE_DEPTH.set(self.queue_depth)
+            except Exception:
+                pass
     
     def record_task_started(self):
-        """Record task execution start"""
+        """record task execution start"""
         with self._lock:
             self.active_tasks += 1
+            # prometheus updates
+            try:
+                DQ_TASKS_STARTED.inc()
+                DQ_ACTIVE_TASKS.set(self.active_tasks)
+            except Exception:
+                pass
     
     def update_worker_count(self, count: int):
-        """Update active worker count"""
+        """update active worker count"""
         with self._lock:
             self.active_workers = count
+            # prometheus updates
+            try:
+                DQ_ACTIVE_WORKERS.set(count)
+            except Exception:
+                pass
     
     def update_queue_depth(self, depth: int):
-        """Update current queue depth"""
+        """update current queue depth"""
         with self._lock:
             self.queue_depth = depth
             self.queue_depths.add(depth)
+            # prometheus updates
+            try:
+                DQ_QUEUE_DEPTH.set(depth)
+            except Exception:
+                pass
     
     def get_uptime(self) -> float:
-        """Get system uptime in seconds"""
+        """get system uptime in seconds"""
         return time.time() - self._start_time
     
     def get_throughput_rate(self) -> float:
-        """Calculate current throughput (tasks/second)"""
+        """calculate current throughput (tasks/second)"""
         summary = self.completion_rate_window.get_summary()
         if summary and summary.count > 0:
-            window_size = min(60, self.get_uptime())  # Use actual time if less than window
+            window_size = min(60, self.get_uptime())  # use actual time if less than window
             return summary.sum / window_size
         return 0.0
     
     def get_submission_rate(self) -> float:
-        """Calculate current submission rate (tasks/second)"""
+        """calculate current submission rate (tasks/second)"""
         summary = self.submission_rate_window.get_summary()
         if summary and summary.count > 0:
             window_size = min(60, self.get_uptime())
@@ -211,14 +307,14 @@ class QueueMetrics:
         return 0.0
     
     def get_success_rate(self) -> float:
-        """Calculate success rate percentage"""
+        """calculate success rate percentage"""
         total = self.tasks_completed + self.tasks_failed
         if total == 0:
             return 100.0
         return (self.tasks_completed / total) * 100
     
     def get_metrics_snapshot(self) -> Dict[str, Any]:
-        """Get a comprehensive snapshot of all metrics"""
+        """get a comprehensive snapshot of all metrics"""
         with self._lock:
             processing_summary = self.task_processing_times.get_summary()
             wait_summary = self.task_wait_times.get_summary()
@@ -274,30 +370,30 @@ class QueueMetrics:
             }
     
     def get_health_status(self) -> Dict[str, Any]:
-        """Get system health status"""
+        """get system health status"""
         metrics = self.get_metrics_snapshot()
         
-        # Define health thresholds
+        # define health thresholds
         is_healthy = True
         warnings = []
         
-        # Check queue depth
+        # check queue depth
         if self.queue_depth > 1000:
             warnings.append(f"High queue depth: {self.queue_depth}")
             is_healthy = False
         
-        # Check success rate
+        # check success rate
         success_rate = self.get_success_rate()
         if success_rate < 95:
             warnings.append(f"Low success rate: {success_rate:.1f}%")
             is_healthy = False
         
-        # Check if workers are active
+        # check if workers are active
         if self.active_workers == 0 and self.queue_depth > 0:
             warnings.append("No active workers with pending tasks")
             is_healthy = False
         
-        # Check processing times
+        # check processing times
         processing_summary = self.task_processing_times.get_summary()
         if processing_summary and processing_summary.p95 > 10:  # 10 seconds
             warnings.append(f"High p95 processing time: {processing_summary.p95:.2f}s")
@@ -322,10 +418,10 @@ class QueueMetrics:
         }
     
     def export_prometheus(self) -> str:
-        """Export metrics in Prometheus format"""
+        """export metrics in Prometheus format"""
         lines = []
         
-        # Add metric descriptions
+        # add metric descriptions
         lines.append("# HELP tasks_submitted_total Total number of tasks submitted")
         lines.append("# TYPE tasks_submitted_total counter")
         lines.append(f"tasks_submitted_total {self.tasks_submitted}")
@@ -350,7 +446,7 @@ class QueueMetrics:
         lines.append("# TYPE throughput_rate gauge")
         lines.append(f"throughput_rate {self.get_throughput_rate():.4f}")
         
-        # Processing time percentiles
+        # processing time percentiles
         processing_summary = self.task_processing_times.get_summary()
         if processing_summary:
             lines.append("# HELP task_processing_seconds Task processing time in seconds")
@@ -364,12 +460,12 @@ class QueueMetrics:
         return '\n'.join(lines)
 
 
-# Global metrics instance
+# global metrics instance
 _metrics = None
 
 
 def get_metrics() -> QueueMetrics:
-    """Get the global metrics instance"""
+    """get the global metrics instance"""
     global _metrics
     if _metrics is None:
         _metrics = QueueMetrics()
@@ -377,6 +473,28 @@ def get_metrics() -> QueueMetrics:
 
 
 def reset_metrics():
-    """Reset all metrics (useful for testing)"""
+    """reset all metrics (useful for testing)"""
     global _metrics
     _metrics = QueueMetrics()
+
+
+# convenience helpers for visibility metrics integration
+def prom_set_active_leases(count: int):
+    try:
+        DQ_ACTIVE_LEASES.set(count)
+    except Exception:
+        pass
+
+
+def prom_inc_lease_expiration(by: int = 1):
+    try:
+        DQ_LEASE_EXPIRATIONS.inc(by)
+    except Exception:
+        pass
+
+
+def prom_inc_lease_extension():
+    try:
+        DQ_LEASE_EXTENSIONS.inc()
+    except Exception:
+        pass
