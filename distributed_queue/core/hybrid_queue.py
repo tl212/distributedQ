@@ -12,9 +12,9 @@ from enum import Enum
 from .queue import PriorityQueue, Task, TaskStatus
 from ..storage.redis_backend import RedisBackend
 from ..monitoring.metrics import get_metrics
+from .visibility_timeout import VisibilityManager, TaskLease
 
 logger = logging.getLogger(__name__)
-
 
 class StorageBackend(Enum):
     # available storage backends
@@ -35,7 +35,9 @@ class HybridQueue:
         redis_url: Optional[str] = "redis://localhost:6379/0",
         max_size: Optional[int] = None,
         rate_limit: Optional[int] = None,
+        visibility_timeout: float = 300.0,
         **kwargs
+
     ):
         """
         Initialize the hybrid queue
@@ -49,7 +51,13 @@ class HybridQueue:
         """
         self.backend_type = backend
         self.metrics = get_metrics()
-        
+        # init visibility manager for task lease management
+        self.visibility_manager = VisibilityManager(default_timeout=visibility_timeout)
+        self.visibility_manager.start_monitoring(check_interval=30.0)
+
+        # set recovery callback to re-queue expired tasks
+        self.visibility_manager.set_recovery_callback(self._handle_expired_lease)
+
         if backend == StorageBackend.REDIS:
             try:
                 # try to initialize Redis backend
@@ -95,7 +103,7 @@ class HybridQueue:
         
         return success
     
-    def get(self, block: bool = True, timeout: Optional[float] = None) -> Optional[Task]:
+    def get(self, worker_id: Optional[str] = None, block: bool = True, timeout: Optional[float] = None) -> Optional[Task]:
         """
         Get the highest priority task
         Args:
@@ -109,13 +117,26 @@ class HybridQueue:
             task = self.backend.get(block=block, timeout=timeout)
         
         if task:
+            # acquire visibility lease for this task
+            if worker_id:
+                try:
+                    lease = self.visibility_manager.acquire_lease(
+                        task_id=task.task_id,
+                        worker_id=worker_id
+                    )
+                    # attach lease to task for worker reference
+                    task.lease = lease
+                    logger.debug(f"Acquired visibility lease for task {task.task_id}")
+                except Exception as e:
+                    logger.error(f"Failed to acquire lease for task {task.task_id}: {e}")
+            
             # update metrics
             self.metrics.record_task_started()
             self.metrics.update_queue_depth(self.size())
         
         return task
-    
-    def mark_completed(self, task_id: str) -> bool:
+
+    def mark_completed(self, task_id: str, worker_id: Optional[str] = None) -> bool:
         # mark a task as completed
         if self.is_redis:
             success = self.backend.mark_completed(task_id)
@@ -124,6 +145,9 @@ class HybridQueue:
         
         if success:
             self.metrics.update_queue_depth(self.size())
+            # release visibility lease if it exists
+            if worker_id:
+                self.visibility_manager.release_lease(task_id, worker_id)        
         
         return success
     
@@ -203,3 +227,10 @@ class HybridQueue:
                 'message': str(e),
                 'stats': {}
             }
+
+    def _handle_expired_lease(self, task_id: str, worker_id: str):
+        """
+        Handle expired lease by re-queuing the task
+        """
+        logger.warning(f"Task {task_id} lease expired for worker {worker_id}, re-queuing")
+        # TODO: Implement actual re-queuing logic
