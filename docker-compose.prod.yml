@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  redis:
+    restart: always
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-}
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+  
+  queue-api:
+    restart: always
+    environment:
+      - USE_REDIS=true
+      - REDIS_URL=redis://redis:6379/0
+      - NUM_WORKERS=${NUM_WORKERS:-3}
+      - MAX_QUEUE_SIZE=${MAX_QUEUE_SIZE:-50000}
+      - RATE_LIMIT=${RATE_LIMIT:-1000}
+      - API_KEY=${API_KEY}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - VISIBILITY_TIMEOUT=${VISIBILITY_TIMEOUT:-300}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/api/v1/health', timeout=10)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+
+volumes:
+  redis-data:
+    driver: local

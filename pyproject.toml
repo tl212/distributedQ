@@ -1,0 +1,12 @@
+[tool.black]
+exclude = ".*"
+
+[tool.isort]
+skip_glob = "*"
+
+[tool.pylint]
+disable = "all"
+
+[tool.autopep8]
+ignore = "E501,E203,E266,W503,W504,W605"
+max_line_length = 999

@@ -151,12 +151,18 @@ class HybridQueue:
         
         return success
     
-    def mark_failed(self, task_id: str, error: Optional[str] = None) -> bool:
-        # mrk a task as failed
+    def mark_failed(self, task_id: str, error: Optional[str] = None, worker_id: Optional[str] = None) -> bool:
+        # mark a task as failed
         if self.is_redis:
-            return self.backend.mark_failed(task_id, error)
+            success = self.backend.mark_failed(task_id, error)
         else:
-            return self.backend.mark_failed(task_id, error)
+            success = self.backend.mark_failed(task_id, error)
+        
+        if success and worker_id:
+            # release visibility lease if it exists
+            self.visibility_manager.release_lease(task_id, worker_id)
+        
+        return success
     
     def get_dead_letters(self) -> List[Task]:
         # get all tasks in dead letter queue

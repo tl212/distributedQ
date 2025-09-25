@@ -14,11 +14,20 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 # prometheus visibility metrics helpers
-from ..monitoring.metrics import (
-    prom_set_active_leases,
-    prom_inc_lease_expiration,
-    prom_inc_lease_extension,
-)
+try:
+    from ..monitoring.metrics import (
+        prom_set_active_leases,
+        prom_inc_lease_expiration,
+        prom_inc_lease_extension,
+    )
+except ImportError:
+    # Fallback functions if prometheus helpers don't exist
+    def prom_set_active_leases(count: int):
+        pass
+    def prom_inc_lease_expiration(by: int = 1):
+        pass
+    def prom_inc_lease_extension():
+        pass
 
 logger = logging.getLogger(__name__)
 
